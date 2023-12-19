@@ -71,8 +71,6 @@ class SogCLR_Loss(nn.Module):
         self.world_size = world_size
         self.s_I = torch.zeros(N).cuda()
         self.s_T = torch.zeros(N).cuda()
-        self.b_I = torch.zeros(N).cuda()
-        self.b_T = torch.zeros(N).cuda()
         self.gamma = gamma
         self.temperature = temperature
         self.eps = 1e-8
@@ -112,17 +110,8 @@ class SogCLR_Loss(nn.Module):
         image_diffs_d_temps = (image_diffs / self.temperature).clone().detach_()
         text_diffs_d_temps = (text_diffs / self.temperature).clone().detach_()
         
-        # update b
-        old_b_I = self.b_I[image_ids]
-        new_b_I = torch.max(image_diffs_d_temps, old_b_I[:, None].tile(1, batch_size))
-        self.b_I[image_ids] = torch.max(new_b_I, dim=1)[0]
-
-        old_b_T = self.b_T[text_ids]
-        new_b_T = torch.max(text_diffs_d_temps, old_b_T[None, :].tile(batch_size, 1))
-        self.b_T[text_ids] = torch.max(new_b_T, dim=0)[0]
-        
-        exp_image_diffs = torch.exp(image_diffs_d_temps - self.b_I[image_ids][:, None]) * self.mask_neg # -b to avoid exp operation overflow
-        exp_text_diffs = torch.exp(text_diffs_d_temps - self.b_T[text_ids][None, :]) * self.mask_neg
+        exp_image_diffs = torch.exp(image_diffs_d_temps) * self.mask_neg
+        exp_text_diffs = torch.exp(text_diffs_d_temps) * self.mask_neg
 
         g_I = torch.sum(exp_image_diffs, dim=1, keepdim=True) / (batch_size-1)
         g_T = torch.sum(exp_text_diffs, dim=0, keepdim=True) / (batch_size-1)
@@ -134,8 +123,8 @@ class SogCLR_Loss(nn.Module):
             s_I = g_I
             s_T = g_T
         else:
-            s_I = (1.0-self.gamma) * self.s_I[image_ids] * torch.exp(old_b_I - self.b_I[image_ids]) + self.gamma * g_I.squeeze()
-            s_T = (1.0-self.gamma) * self.s_T[text_ids] * torch.exp(old_b_T - self.b_T[text_ids]) + self.gamma * g_T.squeeze()
+            s_I = (1.0-self.gamma) * self.s_I[image_ids] + self.gamma * g_I.squeeze()
+            s_T = (1.0-self.gamma) * self.s_T[text_ids] + self.gamma * g_T.squeeze()
             s_I = s_I.reshape(g_I.shape)
             s_T = s_T.reshape(g_T.shape)
 
