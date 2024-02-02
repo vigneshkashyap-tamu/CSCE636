@@ -261,7 +261,7 @@ def evaluation(model, data_loader, tokenizer, device, args):
         image_embeds.append(image_embed)
     image_embeds = torch.cat(image_embeds,dim=0)
     
-    sims_matrix = image_embeds.to(device) @ text_embeds.to(device).t()
+    sims_matrix = image_embeds @ text_embeds.t()
     score_matrix_i2t = torch.full((len(data_loader.dataset.image),len(texts)),-100.0).to(device)
     
     num_tasks = utils.get_world_size()
@@ -366,13 +366,11 @@ def main(args):
     #### Dataset #### 
     print("Creating retrieval dataset")
     train_dataset = create_train_dataset('re', args)
-    # val_coco_dataset, test_coco_dataset = create_val_dataset('re', args, args.val_coco_file, args.coco_image_root, args.test_coco_file)
-    val_coco_dataset = create_val_dataset('re', args, args.val_coco_file, args.coco_image_root, None)
+    val_coco_dataset, test_coco_dataset = create_val_dataset('re', args, args.val_coco_file, args.coco_image_root, args.test_coco_file)
     # val_flickr_dataset, test_flickr_dataset = create_val_dataset('re', args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file)
     # sbu_dataset = create_val_dataset('re', args, args.sbu_file, args.sbu_image_root)
     print("len of train_dataset:", len(train_dataset))
-    # print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
-    print("len of coco val:", len(val_coco_dataset))
+    print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     # print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
     # print("len of sbu data:", len(sbu_dataset))
 
@@ -402,10 +400,8 @@ def main(args):
 
     train_loader = create_train_loader(train_dataset, samplers[0], args.batch_size_train, 8, None)
 
-    # val_coco_loader, test_coco_loader = create_val_loader([val_coco_dataset, test_coco_dataset], samplers[1:], 
-    #                                                       [args.batch_size_test]*2, [8]*2, [None]*2)
-    val_coco_loader = create_val_loader([val_coco_dataset], samplers[1:2], 
-                                        [args.batch_size_test], [8], [None])[0]
+    val_coco_loader, test_coco_loader = create_val_loader([val_coco_dataset, test_coco_dataset], samplers[1:], 
+                                                          [args.batch_size_test]*2, [8]*2, [None]*2)
     # val_flickr_loader, test_flickr_loader = create_val_loader([val_flickr_dataset, test_flickr_dataset], samplers[1:], 
     #                                                           [args.batch_size_test]*2, [8]*2, [None]*2)
     # sbu_loader= create_val_loader([sbu_dataset], [None], [args.batch_size_test], [32], [None])[0]
@@ -491,7 +487,7 @@ def main(args):
                                 grad_scaler, args)
             
         score_val_i2t_coco, score_val_t2i_coco = evaluation(model_without_ddp, val_coco_loader, tokenizer, device, args)
-        # score_test_i2t_coco, score_test_t2i_coco = evaluation(model_without_ddp, test_coco_loader, tokenizer, device, args)
+        score_test_i2t_coco, score_test_t2i_coco = evaluation(model_without_ddp, test_coco_loader, tokenizer, device, args)
 
         # score_val_i2t_flickr, score_val_t2i_flickr = evaluation(model_without_ddp, val_flickr_loader, tokenizer, device, args)
         # score_test_i2t_flickr, score_test_t2i_flickr = evaluation(model_without_ddp, test_flickr_loader, tokenizer, device, args)
@@ -503,8 +499,8 @@ def main(args):
       
             val_result_coco = itm_eval(score_val_i2t_coco, score_val_t2i_coco, val_coco_loader.dataset.txt2img, val_coco_loader.dataset.img2txt)  
             print("coco val:", val_result_coco)
-            # test_result_coco = itm_eval(score_test_i2t_coco, score_test_t2i_coco, test_coco_loader.dataset.txt2img, test_coco_loader.dataset.img2txt)    
-            # print("coco test:", test_result_coco)
+            test_result_coco = itm_eval(score_test_i2t_coco, score_test_t2i_coco, test_coco_loader.dataset.txt2img, test_coco_loader.dataset.img2txt)    
+            print("coco test:", test_result_coco)
 
             # if args.evaluate:
             #     val_result_flickr = itm_eval(score_val_i2t_flickr, score_val_t2i_flickr, val_flickr_loader.dataset.txt2img, val_flickr_loader.dataset.img2txt)  
@@ -523,7 +519,7 @@ def main(args):
             
             if args.evaluate:                
                 log_stats = {**{f'val_{k}': v for k, v in val_result_coco.items()},
-                             # **{f'test_{k}': v for k, v in test_result_coco.items()},                  
+                             **{f'test_{k}': v for k, v in test_result_coco.items()},                  
                              'epoch': epoch,
                              'data': 'coco',
                             }
@@ -544,7 +540,7 @@ def main(args):
             else:
                 log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                              **{f'val_{k}': v for k, v in val_result_coco.items()},
-                             # **{f'test_{k}': v for k, v in test_result_coco.items()},                  
+                             **{f'test_{k}': v for k, v in test_result_coco.items()},                  
                              'epoch': epoch,
                              'data': 'coco',
                             }
@@ -590,8 +586,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # data path
-    parser.add_argument('--data_path', default='./datasets')
-    parser.add_argument('--ann_path', default='./clip_train')
+    parser.add_argument('--data_path', default='/data/qiuzh/VLP')
     parser.add_argument('--train_file', default='downstream/cc3m_train_new.json')
     parser.add_argument('--train_image_root', default='cc3m')
 
@@ -616,14 +611,14 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', default=0.02, type=float)
     parser.add_argument('--decay_rate', default=1, type=float)
     parser.add_argument('--epochs', default=30, type=int)
-    parser.add_argument('--warmup_epochs', default=5, type=int)
+    parser.add_argument('--warmup_epochs', default=20, type=int)
     parser.add_argument('--cooldown_epochs', default=0, type=int)
 
     # training & test settings
     parser.add_argument('--use_amp', action='store_true')
     parser.add_argument('--init_model', action='store_true')
-    parser.add_argument('--batch_size_train', default=128, type=int)
-    parser.add_argument('--batch_size_test', default=128, type=int)
+    parser.add_argument('--batch_size_train', default=256, type=int)
+    parser.add_argument('--batch_size_test', default=256, type=int)
     parser.add_argument('--k_test', default=256, type=int)
     parser.add_argument('--evaluate', action='store_true')
     parser.add_argument('--checkpoint', default='', type=str)
@@ -674,12 +669,12 @@ if __name__ == '__main__':
     if args.check_samples_tau:
         args.evaluate = True
 
-    args.train_file = os.path.join(args.ann_path, args.train_file)
+    args.train_file = os.path.join(args.data_path, args.train_file)
     args.train_image_root = os.path.join(args.data_path, args.train_image_root)
 
-    args.val_coco_file = os.path.join(args.ann_path, 'coco_val.json')
-    # args.test_coco_file = os.path.join(args.ann_path, 'coco_test.json')
-    args.coco_image_root = os.path.join(args.data_path, 'mscoco_val/mscoco_val2014_subset_5k')
+    args.val_coco_file = os.path.join(args.data_path, 'clip_train/coco_val_new.json')
+    args.test_coco_file = os.path.join(args.data_path, 'clip_train/coco_test_new.json')
+    args.coco_image_root = os.path.join(args.data_path, 'coco')
     # args.val_flickr_file = os.path.join(args.data_path, 'clip_train/flickr30k_val.json')
     # args.test_flickr_file = os.path.join(args.data_path, 'clip_train/flickr30k_test.json')
     # args.flickr_image_root = os.path.join(args.data_path, 'flickr30k')
