@@ -162,7 +162,7 @@ class SogCLR_Loss(nn.Module):
 # add some new features to iSogCLR
 class iSogCLR_New_Loss(nn.Module):
     def __init__(self, N=2900000, gamma=0.8, tau_init=0.01, world_size=8, bsz=128, rho_I=8.0, rho_T=8.0,
-                       use_temp_net=True, feature_dim=256):  # use temperature network      
+                       use_temp_net=True, feature_dim=256, eta_init=0.03):  # use temperature network      
         
         #Inputs:
         #   N is number of samples in training set
@@ -185,7 +185,7 @@ class iSogCLR_New_Loss(nn.Module):
 
         self.use_temp_net = use_temp_net
 
-        self.eta_init = 1e-5  
+        self.eta_init = eta_init
 
         if self.use_temp_net:
             self.image_temp_gen = TempGenerator(feature_dim=feature_dim, M=256, tau_min=self.tau_min, tau_max=self.tau_max).cuda()
@@ -285,8 +285,8 @@ class iSogCLR_New_Loss(nn.Module):
             self.tau_I[image_ids] = (tau_image - self.eta_init * self.u_I[image_ids]).clamp_(min=self.tau_min, max=self.tau_max)
             self.tau_T[text_ids] = (tau_text - self.eta_init * self.u_T[text_ids]).clamp_(min=self.tau_min, max=self.tau_max)
 
-        return total_loss, tau_image.mean().item(), tau_text.mean().item(), self.eta_init,  \
-                temp_weight_image.mean().item(), temp_weight_text.mean().item(), temp_weight_image.max().item(), temp_weight_image.min().item()
+        return total_loss, self.tau_I[image_ids].mean().item(), self.tau_T[text_ids].mean().item(), self.eta_init,  \
+                temp_weight_image.mean().item(), temp_weight_text.mean().item(), self.b_I[image_ids].mean().item(), self.b_T[text_ids].mean().item()
 
 
 

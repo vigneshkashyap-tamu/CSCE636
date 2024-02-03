@@ -52,10 +52,6 @@ def train(model, data_loader, optimizer, tokenizer, epoch, max_epoch, warmup_ste
     metric_logger.add_meter('grad_tau_text', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
     metric_logger.add_meter('b_I', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
     metric_logger.add_meter('b_T', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-    metric_logger.add_meter('v', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-    metric_logger.add_meter('lamda', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-    metric_logger.add_meter('weights_image_pos', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
-    metric_logger.add_meter('weights_text_pos', utils.SmoothedValue(window_size=1, fmt='{value:.4f}'))
 
     header = 'Train Epoch: [{}]'.format(epoch)
     print_freq = 50
@@ -95,10 +91,6 @@ def train(model, data_loader, optimizer, tokenizer, epoch, max_epoch, warmup_ste
             metric_logger.update(grad_tau_text=info_dict['grad_tau_text'])
             metric_logger.update(b_I=info_dict['b_I'])
             metric_logger.update(b_T=info_dict['b_T'])
-            metric_logger.update(weights_image_pos=0.0)
-            metric_logger.update(weights_text_pos=0.0)
-            metric_logger.update(v=0.0)
-            metric_logger.update(lamda=0.0)
         elif args.ita_type == 'isogclr_new_v2':
             metric_logger.update(avg_image_tau=info_dict['avg_image_tau'])
             metric_logger.update(avg_text_tau=info_dict['avg_text_tau'])
@@ -107,34 +99,22 @@ def train(model, data_loader, optimizer, tokenizer, epoch, max_epoch, warmup_ste
             metric_logger.update(grad_tau_text=info_dict['grad_tau_text'])
             metric_logger.update(b_I=info_dict['b_I'])
             metric_logger.update(b_T=info_dict['b_T'])
-            metric_logger.update(weights_image_pos=0.0)
-            metric_logger.update(weights_text_pos=0.0)
-            metric_logger.update(v=info_dict['v'])
-            metric_logger.update(lamda=info_dict['lamda'])
         elif args.ita_type == 'sogclr':
             metric_logger.update(avg_image_tau=info_dict['avg_image_tau'])
             metric_logger.update(avg_text_tau=info_dict['avg_text_tau'])
-            metric_logger.update(weights_image_pos=0.0)
-            metric_logger.update(weights_text_pos=0.0)
             metric_logger.update(cur_eta=0.0)
             metric_logger.update(grad_tau_image=0.0)
             metric_logger.update(grad_tau_text=0.0)
             metric_logger.update(b_I=0.0)
             metric_logger.update(b_T=0.0)
-            metric_logger.update(v=0.0)
-            metric_logger.update(lamda=info_dict['lamda'])
         else:
             metric_logger.update(avg_image_tau=info_dict['avg_image_tau'])
             metric_logger.update(avg_text_tau=info_dict['avg_text_tau'])
             metric_logger.update(cur_eta=0.0)
             metric_logger.update(grad_tau_image=0.0)
             metric_logger.update(grad_tau_text=0.0)
-            metric_logger.update(weights_image_pos=0.0)
-            metric_logger.update(weights_text_pos=0.0)
             metric_logger.update(b_I=0.0)
             metric_logger.update(b_T=0.0)
-            metric_logger.update(v=0.0)
-            metric_logger.update(lamda=0.0)
 
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(lr_temp_net=optimizer.param_groups[2]["lr"])
@@ -428,7 +408,7 @@ def main(args):
                   world_size=args.world_size, ita_type=args.ita_type, sogclr_gamma=args.sogclr_gamma, rho_I=args.rho_I, rho_T=args.rho_T, tau_init=args.tau_init,
                   eta_init=args.eta_init, beta_u=args.beta_u, temp=args.temp, learnable_temp=args.learnable_temp,
                   vicreg_sim_coeff=args.vicreg_sim_coeff, vicreg_std_coeff=args.vicreg_std_coeff, personalized_tau=args.personalized_tau, 
-                  use_temp_net=args.isogclr_temp_net, alpha=args.alpha, distributed=args.distributed)
+                  use_temp_net=args.isogclr_temp_net, alpha=args.alpha, distributed=args.distributed, N=args.train_num_samples_total)
     model = model.to(device)
 
     if args.evaluate or args.ita_type == 'isogclr_denoise':
@@ -568,11 +548,10 @@ def main(args):
                     best = val_result_coco['r_mean']    
                     best_epoch = epoch
 
-                if (epoch+1) % 2 == 0:
-                    save_obj = {
-                        'model': model_without_ddp.state_dict()
-                    }
-                    torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_'+str(epoch+1)+'.pth'))
+                save_obj = {
+                    'model': model_without_ddp.state_dict()
+                }
+                torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_'+str(epoch+1)+'.pth'))
                     
         if args.evaluate: 
             break

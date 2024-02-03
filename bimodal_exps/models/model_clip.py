@@ -36,6 +36,7 @@ class CLIP(nn.Module):
                  use_temp_net = True,
                  alpha = 1.0,
                  distributed=True,
+                 N = 3400000,
                  ):
         super().__init__()
 
@@ -99,7 +100,7 @@ class CLIP(nn.Module):
 
         elif self.ita_type == 'isogclr_new':
             self.criterion = iSogCLR_New_Loss(world_size=world_size, gamma=sogclr_gamma, rho_I=rho_I, rho_T=rho_T, tau_init=tau_init, bsz=bsz,
-                                              use_temp_net=use_temp_net, feature_dim=embed_dim)
+                                              use_temp_net=use_temp_net, feature_dim=embed_dim, N=N, eta_init=eta_init)
         else:
             raise NotImplementedError
 
