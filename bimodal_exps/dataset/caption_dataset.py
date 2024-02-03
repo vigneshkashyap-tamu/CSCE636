@@ -61,7 +61,10 @@ class re_eval_dataset(Dataset):
         self.image = []
         self.txt2img = {}
         self.img2txt = {}
-        
+
+        # HACK if is coco dataset, append COCO_val2014_ to image path
+        self.is_coco = "coco" in ann_file
+
         txt_id = 0
         for img_id, ann in enumerate(self.ann):
             self.image.append(ann['image'])
@@ -87,7 +90,11 @@ class re_eval_dataset(Dataset):
         return len(self.image)
     
     def __getitem__(self, index, enable_transform=True):    
-        image_path = os.path.join(self.image_root, self.ann[index]['image'])        
+        if self.is_coco:
+            path = self.ann[index]['image'].split("/")[0] + "/COCO_val2014_" + self.ann[index]['image'].split("/")[-1]
+        else:
+            path = self.ann[index]['image']
+        image_path = os.path.join(self.image_root, path)        
         image = Image.open(image_path).convert('RGB')    
         
         if enable_transform:
