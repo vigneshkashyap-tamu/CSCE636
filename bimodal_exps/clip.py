@@ -30,7 +30,7 @@ from transformers import AutoTokenizer, RobertaTokenizer
 
 import utils
 import shutil
-from dataset import create_train_dataset, create_val_dataset, create_sampler, create_train_loader, create_val_loader
+from dataset import create_train_dataset, create_val_dataset, create_sampler, create_train_loader, create_val_loader, get_wds_dataset, get_transform
 from scheduler import create_scheduler
 from optim import create_optimizer
 
@@ -62,7 +62,8 @@ def train(model, data_loader, optimizer, tokenizer, epoch, max_epoch, warmup_ste
     step_size = 100
     warmup_iterations = warmup_steps*step_size  
 
-    for i,(image, text, idx, text_idx) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    # for i,(image, text, idx, text_idx) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for i,((image, text, idx, text_idx), _) in enumerate(zip(data_loader, metric_logger.log_every(range(data_loader.num_batches), print_freq, header))):
         optimizer.zero_grad()
 
         image = image.to(device, non_blocking=True)   
@@ -365,16 +366,17 @@ def main(args):
 
     #### Dataset #### 
     print("Creating retrieval dataset")
-    train_dataset = create_train_dataset('re', args)
+    # train_dataset = create_train_dataset('re', args)
     val_coco_dataset, test_coco_dataset = create_val_dataset('re', args, args.val_coco_file, args.coco_image_root, args.test_coco_file)
     # val_flickr_dataset, test_flickr_dataset = create_val_dataset('re', args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file)
     # sbu_dataset = create_val_dataset('re', args, args.sbu_file, args.sbu_image_root)
-    print("len of train_dataset:", len(train_dataset))
+    # print("len of train_dataset:", len(train_dataset))
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     # print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
     # print("len of sbu data:", len(sbu_dataset))
 
     if args.extract_data:
+        raise NotImplementedError
         idx_list = []
         data_dir = os.path.join(args.output_dir, '')
         Path(data_dir).mkdir(parents=True, exist_ok=True)
@@ -387,18 +389,24 @@ def main(args):
 
         assert 0
 
-    num_training = int(args.train_frac * len(train_dataset))
-    train_dataset = Subset(train_dataset, list(range(num_training)))
+    # num_training = int(args.train_frac * len(train_dataset))
+    # train_dataset = Subset(train_dataset, list(range(num_training)))
 
 
-    if args.distributed:
-        num_tasks = utils.get_world_size()
-        global_rank = utils.get_rank()            
-        samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [None, None]
-    else:
-        samplers = [None, None, None]
+    # if args.distributed:
+    #     num_tasks = utils.get_world_size()
+    #     global_rank = utils.get_rank()            
+    #     samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [None, None]
+    # else:
+    #     samplers = [None, None, None]
+    num_tasks = utils.get_world_size()
+    global_rank = utils.get_rank()
+    samplers = [None, None, None]
 
-    train_loader = create_train_loader(train_dataset, samplers[0], args.batch_size_train, 8, None)
+    # train_loader = create_train_loader(train_dataset, samplers[0], args.batch_size_train, 8, None)
+    train_transform = get_transform(args.image_res, is_train=True)
+    train_loader = get_wds_dataset(args.train_file[0], args.train_num_samples, seed, args.batch_size_train, 8,
+                                   num_tasks, train_transform, args.image_res, 0, tokenize=None)
 
     val_coco_loader, test_coco_loader = create_val_loader([val_coco_dataset, test_coco_dataset], samplers[1:], 
                                                           [args.batch_size_test]*2, [8]*2, [None]*2)
@@ -431,6 +439,7 @@ def main(args):
         print('load checkpoint from %s' % args.checkpoint)
 
     if args.check_samples_tau:
+        raise NotImplementedError
         image_tau_array = []
         text_tau_array = []
 
@@ -481,8 +490,8 @@ def main(args):
     start_time = time.time()    
     for epoch in range(0, max_epoch):
         if not args.evaluate:
-            if args.distributed:
-                train_loader.sampler.set_epoch(epoch)
+            # if args.distributed:
+            #     train_loader.sampler.set_epoch(epoch)
             train_stats = train(model, train_loader, optimizer, tokenizer, epoch, max_epoch, warmup_steps, device, lr_scheduler, 
                                 grad_scaler, args)
             
@@ -589,6 +598,8 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', default='/data/qiuzh/VLP')
     parser.add_argument('--train_file', default='downstream/cc3m_train_new.json')
     parser.add_argument('--train_image_root', default='cc3m')
+    parser.add_argument("--train_num_samples", type=int)
+    parser.add_argument("--train_num_samples_total", type=int)
 
     # model config
     parser.add_argument('--bert_config', default='configs/config_bert.json')
@@ -661,16 +672,22 @@ if __name__ == '__main__':
     parser.add_argument('--extract_data', action='store_true')
 
     # zero-shot transfer
-    # parser.add_argument('--zs_dataset', required=True, choices=['cifar10', 'cifar100', 'imagenet'])
-    # parser.add_argument('--zs_datafolder', default='./datasets', type=str)
+    parser.add_argument('--zs_dataset', required=True, choices=['cifar10', 'cifar100', 'imagenet'])
+    parser.add_argument('--zs_datafolder', default='./datasets', type=str)
 
     args = parser.parse_args()
 
     if args.check_samples_tau:
         args.evaluate = True
 
-    args.train_file = os.path.join(args.data_path, args.train_file)
-    args.train_image_root = os.path.join(args.data_path, args.train_image_root)
+    args.train_file = eval(args.train_file)
+    args.train_image_root = eval(args.train_image_root)
+
+    assert len(args.train_file) == len(args.train_image_root) 
+
+    for i in range(len(args.train_file)):
+        args.train_file[i] = os.path.join(args.data_path, args.train_file[i])
+        args.train_image_root[i] = os.path.join(args.data_path, args.train_image_root[i])
 
     args.val_coco_file = os.path.join(args.data_path, 'clip_train/coco_val_new.json')
     args.test_coco_file = os.path.join(args.data_path, 'clip_train/coco_test_new.json')
