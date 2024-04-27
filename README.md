@@ -18,76 +18,22 @@ pip install -r requirements.txt
 
 ### Training and Evaluation
 
-1. Download the data: [cc3m_subset_100k.tar.gz](https://drive.google.com/file/d/142zQjlOw0Xw4tKzXMrQjYE6NtGRTeasT/view?usp=drive_link), a 100k subset of the [Conceptual Captions](https://ai.google.com/research/ConceptualCaptions/) dataset; [mscoco_val.tar.gz](https://drive.google.com/file/d/142tMsnclHTTPpnTXHSeNgTUlBk4She6o/view?usp=drive_link), a 5k subset of the [COCO](https://cocodataset.org/#home) val2014 dataset; [clip_train.tar.gz](https://drive.google.com/file/d/142xxRoMaHxX3BIfCw_1b_G_dgu-02Yq3/view?usp=drive_link), captions of the previous datasets. The code and data should be structured as follows:
+1. Download the data: We recommend using [img2dataset](https://github.com/rom1504/img2dataset) to download your training dataset and store it in webdataset format. For evaluation, we will use MSCOCO dataset provided by [the iSogCLR repo](https://github.com/zhqiu/contrastive-learning-iSogCLR/tree/main/bimodal_exps). The code and data should be structured as follows:
     ```
     .
     +--bimodal_exps (code)
     |
-    +--clip_train (captions)
-    |  +--cc3m_train_subset.json
-    |  +--coco_val.json
+    +--datasets
+    |  +--cc3m (in webdataset format)
+    |  +--cc12m (in webdataset format)
+    |  +--coco
+    |  +--clip_train (captions of MSCOCO evaluation set)
     |
-    +--datasets (images)
-    |  +--cc3m_subset_100k
-    |  +--mscoco_val
+    +--job_output (for storing slurm job outputs)
     ```
-2. To train a model on cc3m, use `run.slurm` if slurm is supported or run
-    ```bash
-    export PYTHONPATH="$PYTHONPATH:./bimodal_exps"
-    export HUGGINGFACE_HUB_CACHE='./checkpoints/huggingface'
-
-    data_path=./datasets
-    ann_path=./clip_train
-    train_image_root=cc3m_subset_100k/
-    data=cc3m
-    train_file=${data}_train_subset.json
-    gamma=0.8
-    epochs=30
-
-    CUDA_VISIBLE_DEVICES=0 python ./bimodal_exps/clip.py \
-        --data_path ${data_path} \
-        --ann_path ${ann_path} \
-        --train_file ${train_file} \
-        --train_image_root ${train_image_root} \
-        --output_dir output/isogclr_${data}_g${gamma}_e${epochs} \
-        --init_model \
-        --use_amp \
-        --ita_type sogclr \
-        --tau_init 0.01 \
-        --sogclr_gamma ${gamma} \
-        --eta_init 0.03 --sched cosine \
-        --no-distributed \
-        --epochs ${epochs}
-    ```
-3. To test the performance of a model on mscoco, use `eval.slurm` if slurm is supported or run
-    ```bash
-    export PYTHONPATH="$PYTHONPATH:./bimodal_exps"
-    export HUGGINGFACE_HUB_CACHE='./checkpoints/huggingface'
-
-    data_path=./datasets
-    ann_path=./clip_train
-    train_image_root=cc3m_subset_100k/
-    data=cc3m
-    train_file=${data}_train_subset.json
-    gamma=0.8
-    epochs=30
-
-    CUDA_VISIBLE_DEVICES=0 python ./bimodal_exps/clip.py \
-        --data_path ${data_path} \
-        --ann_path ${ann_path} \
-        --train_file ${train_file} \
-        --train_image_root ${train_image_root} \
-        --output_dir output/isogclr_${data}_g${gamma}_e${epochs} \
-        --init_model \
-        --use_amp \
-        --ita_type sogclr \
-        --tau_init 0.01 \
-        --sogclr_gamma ${gamma} \
-        --eta_init 0.03 --sched cosine \
-        --no-distributed \
-        --epochs ${epochs} \
-        --evaluate --checkpoint './output/isogclr_cc3m_g0.8_e30/checkpoint_30.pth'
-    ```
+2. To train a model on cc3m, use `sbatch run.slurm` if slurm is supported else run `bash run.slurm`
+3. TO train on other datasets, modify `data` in `run.slurm`
+4. To test the performance of a model on mscoco, use `sbatch eval.slurm` if slurm is supported else run `bash eval.slurm`
 
 ## Reference
 If you find this tutorial helpful, please cite:
