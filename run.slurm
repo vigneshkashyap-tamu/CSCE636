@@ -1,13 +1,13 @@
 #!/bin/bash
 
 ##NECESSARY JOB SPECIFICATIONS
-#SBATCH --time=2-00:00:00
-#SBATCH --mem=80G
+#SBATCH --time=3-00:00:00
+#SBATCH --mem=40G
 #SBATCH --output=./job_output/%x_%j.log
 #SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
-#SBATCH --gpus-per-task=a100:2
+#SBATCH --cpus-per-task=4
+#SBATCH --gpus-per-task=1
 #SBATCH --partition=gpu
 
 #First Executable Line
@@ -46,11 +46,14 @@ ita_type=isogclr_new
 # ita_type=clip
 lr='2e-4'
 weight_decay=0.02
-eta_init='3e-2'
+eta_init='1e-5'
 epochs=30
+warmup_epochs=5
+beta_u=0.5
+temp=0.01
+batch_size_train=128
 
-CUDA_VISIBLE_DEVICES='0,1' python -m torch.distributed.launch --nproc_per_node=2 --master_port=54820 \
-    --use_env ./bimodal_exps/clip.py \
+CUDA_VISIBLE_DEVICES='0' python -u ./bimodal_exps/clip.py \
     --data_path ${data_path} \
     --train_file ${train_file} \
     --train_image_root ${train_image_root} \
@@ -63,12 +66,12 @@ CUDA_VISIBLE_DEVICES='0,1' python -m torch.distributed.launch --nproc_per_node=2
     --eta_init "${eta_init}" --sched cosine \
     --epochs "${epochs}" --lr "${lr}" \
     --embed_dim 256 \
-    --batch_size_train 256 \
+    --batch_size_train "${batch_size_train}" --batch_size_test 256 \
     --rho_I "${rho}" --rho_T "${rho}" \
     --train_frac ${frac} \
     --zs_dataset imagenet \
     --zs_datafolder ${imagenet_val_path} \
     --train_num_samples "${train_num_samples}" \
     --train_num_samples_total "${train_num_samples_total}" \
-    --weight_decay "${weight_decay}" \
-    --distributed
+    --weight_decay "${weight_decay}" --warmup_epochs "${warmup_epochs}" --beta_u "${beta_u}" --temp "${temp}" \
+    --no-distributed --store_tau
